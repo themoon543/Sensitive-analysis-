@@ -1,4 +1,3 @@
-# Sensitive-analysis-
 import numpy as np 
 import pandas as pd
 
@@ -7,19 +6,27 @@ for dirname, _, filenames in os.walk(r"C:\Users\Aizhan\Downloads\amazon_reviews.
     for filename in filenames:
         print(os.path.join(dirname, filename))
 
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 plt.style.use('ggplot')
 
 import nltk
+
+Cleaning data
+
+
 df = pd.read_csv(r"C:\Users\Aizhan\Downloads\amazon_reviews.csv\amazon_reviews.csv")
 df = df.tail(1000)
+
 list(df)
+
 df.rename(columns = {'Unnamed: 0':'Id'}, inplace = True)
+
 df.tail()
+
 df.info()
+
 #checking shape of data
 print(df.shape)
 
@@ -52,12 +59,14 @@ nltk.download('maxent_ne_chunker')
 entities = nltk.chunk.ne_chunk(tagged)
 entities.pprint()
 
+Now we will use VADER MODEL
+
 from nltk.sentiment import SentimentIntensityAnalyzer
 from tqdm.notebook import tqdm
 nltk.download('vader_lexicon')
 sia = SentimentIntensityAnalyzer()
 
-sia 
+sia
 
 #implement sia in example
 sia.polarity_scores(example)
@@ -69,11 +78,13 @@ for i, row in tqdm(df.iterrows(), total=len(df)):
     myid = row['Id']
     res[myid] = sia.polarity_scores(text)
 
+#showing results
 res
 
 res_df = pd.DataFrame.from_dict(res, orient='index')
 
 print(res_df)
+
 #saving vader results
 vaders = pd.DataFrame(res).T
 vaders = vaders.reset_index().rename(columns={'index': 'Id'})
@@ -98,22 +109,59 @@ axs[2].set_title('Negative')
 plt.tight_layout()
 plt.show()
 
-#Now we create a Roberta Model
+# Roberta Model
+
 from transformers import AutoTokenizer
 from transformers import AutoModelForSequenceClassification
 from scipy.special import softmax
 
-!pip install torch torchvision torchaudio
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-MODEL = f"cardiffanlp/twitter-roberta-base-sentiment"
+MODEL = "distilroberta-base"  # Replace with a valid model name
 tokenizer = AutoTokenizer.from_pretrained(MODEL)
 model = AutoModelForSequenceClassification.from_pretrained(MODEL)
 
-#VADER results is here
-print(example)
-sia.polarity_scores(example)
+
+scores_dict = {
+    'roberta_class_1' : scores[0],
+    'roberta_class_2' : scores[1]
+}
+
+
+from transformers import RobertaTokenizer, RobertaForSequenceClassification
+from scipy.special import softmax
+
+# Load the tokenizer and model from Hugging Face
+tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+model = RobertaForSequenceClassification.from_pretrained('roberta-base')
+
+# Assuming 'example' is your text string that you want to analyze
+# example = "Your text here."
+
+# Encoding the text using the tokenizer
+encoded_text = tokenizer(example, return_tensors='pt')
+
+# Getting the model output
+output = model(**encoded_text)
+
+# Process the output to get scores
+scores = output[0][0].detach().numpy()
+scores = softmax(scores)
+
+# Adjusting the dictionary creation based on the number of output classes
+# Assuming it's a binary classification model
+scores_dict = {
+    'roberta_class_1' : scores[0],
+    'roberta_class_2' : scores[1]
+}
+
+print(scores_dict)
+
+
+
 
 #run roberta
+
 encoded_text = tokenizer(example, return_tensors='pt')
 output = model(**encoded_text)
 scores = output[0][0].detach().numpy()
@@ -121,17 +169,9 @@ scores = softmax(scores)
 scores_dict = {
     'roberta_neg' : scores[0],
     'roberta_neu' : scores[1],
-    'roberta_pos' : scores[2]
+    'roberta_pos' : scores[0]
 }
 print(scores_dict)
-
-
-
-
-
-
-
-
 
 #run on entire dataset
 def polarity_scores_roberta(example):
@@ -142,11 +182,24 @@ def polarity_scores_roberta(example):
     scores_dict = {
         'roberta_neg' : scores[0],
         'roberta_neu' : scores[1],
-        'roberta_pos' : scores[2]
+        'roberta_pos' : scores[0]
     }
     return scores_dict
 
-    res = {}
+pip install torch torchvision torchaudio
+
+
+pip install transformers
+
+
+from transformers import RobertaTokenizer, RobertaForSequenceClassification
+from transformers import pipeline
+
+
+#from custom_sentiment_analysis import polarity_scores_roberta
+
+
+res = {}
 for i, row in tqdm(df.iterrows(), total=len(df)):
     try:
         text = row['reviewText']
@@ -168,33 +221,111 @@ results_df = results_df.merge(df, how='left')
 
 results_df.head()
 
+# Compare Scores Between Two Models
+
 results_df.columns
 
-sns.pairplot(data=results_df, vars=['vader_neg', 'vader_neu', 'vader_pos','roberta_neg', 'roberta_neu', 'roberta_pos'],
-            hue='overall',
-            palette='tab10')
+sns.pairplot(data=results_df, 
+             vars=['neg', 'neu', 'pos', 'compound'],
+             hue='overall',
+             palette='tab10')
 plt.show()
 
-#the most positive in star 1 review
-results_df.query('overall == 1.0') \
-    .sort_values('roberta_pos', ascending=False)['reviewText'].values[0]
+
+# Review
+
+# Finding the most positive review in 1-star reviews based on 'pos' column
+most_positive_review = results_df.query('overall == 1.0') \
+                                 .sort_values('pos', ascending=False)['reviewText'].values[0]
+
+print(most_positive_review)
+
 
 #the most positive in star 1 review
 results_df.query('overall == 1.0') \
     .sort_values('vader_pos', ascending=False)['reviewText'].values[0]
 
-#negative sentiment 5-star view
-results_df.query('overall == 5.0') \
-    .sort_values('roberta_neg', ascending=False)['reviewText'].values[0]
+# Finding the most negative sentiment review in 5-star reviews based on 'neg' column
+most_negative_review_5_star = results_df.query('overall == 5.0') \
+                                        .sort_values('neg', ascending=False)['reviewText'].values[0]
 
-#the most positive in star 1 review
-results_df.query('overall == 5.0') \
-    .sort_values('vader_neg', ascending=False)['reviewText'].values[0]
+print(most_negative_review_5_star)
+
+
+# huggingface transformers pipeline
 
 from transformers import pipeline
 
 sent_pipeline = pipeline("sentiment-analysis")
 
 sent_pipeline(example)
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
+nltk.download('punkt')
+nltk.download('stopwords')
+
+# Assuming df is your DataFrame
+
+# Define sentiment labels based on 'overall' rating
+def define_sentiment(rating):
+    if rating >= 4: return 'positive'
+    elif rating <= 2: return 'negative'
+    else: return 'neutral'
+
+df['sentiment'] = df['overall'].apply(define_sentiment)
+
+# Preprocess data
+def preprocess(text):
+    tokens = word_tokenize(str(text).lower())
+    tokens = [word for word in tokens if word not in stopwords.words('english')]
+    return ' '.join(tokens)
+
+df['processed_reviews'] = df['reviewText'].apply(preprocess)
+
+# Feature extraction
+vectorizer = TfidfVectorizer(max_features=5000)
+X = vectorizer.fit_transform(df['processed_reviews'])
+y = df['sentiment']
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Model training
+model = LogisticRegression()
+model.fit(X_train, y_train)
+
+# Model evaluation
+y_pred = model.predict(X_test)
+print("Accuracy:", accuracy_score(y_test, y_pred))
+
+# Predicting new comments
+def predict_sentiment(comment):
+    processed = preprocess(comment)
+    vectorized = vectorizer.transform([processed])
+    return model.predict(vectorized)
+
+# Example usage
+print(predict_sentiment("This product is a bad"))
+
+
+from transformers import pipeline
+
+# Load a pre-trained sentiment analysis pipeline
+sentiment_pipeline = pipeline('sentiment-analysis')
+
+# Function to predict sentiment
+def predict_sentiment(comment):
+    return sentiment_pipeline(comment)
+
+# Example usage
+print(predict_sentiment('Good one'))
 
 
